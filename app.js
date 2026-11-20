@@ -1072,6 +1072,37 @@ document.addEventListener('pointermove', event => {
 document.addEventListener('pointerup', () => { if (gesture?.source === 'mouse') finishGesture(); });
 document.addEventListener('pointercancel', () => { if (gesture?.source === 'mouse') finishGesture(true); });
 
+function trackKeyboardLayout() {
+  const visual = window.visualViewport;
+  if (!visual) return;
+  const page = document.documentElement;
+  let fullHeight = root.clientHeight;
+
+  function update() {
+    const editor = document.activeElement;
+    const editing = editor?.matches('textarea, input:not([type="file"])');
+    const wasOpen = page.classList.contains('keyboard-open');
+    const open = visual.scale === 1 && (editing || wasOpen) && fullHeight - visual.height > 135;
+    page.classList.toggle('keyboard-open', open);
+    if (!open) {
+      if (!editing) fullHeight = root.clientHeight;
+      return;
+    }
+    page.style.setProperty('--app-full-height', fullHeight + 'px');
+    page.style.setProperty('--keyboard-viewport-height', Math.round(visual.height + visual.offsetTop) + 'px');
+    if (editor?.matches('.shell textarea') &&
+      editor.getBoundingClientRect().bottom > visual.height + visual.offsetTop - 56) {
+      editor.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  visual.addEventListener('resize', update);
+  visual.addEventListener('scroll', update);
+  document.addEventListener('focusin', update);
+  document.addEventListener('focusout', () => requestAnimationFrame(update));
+  update();
+}
+
 (async () => {
   data = await store.load();
   syncDay();
@@ -1081,15 +1112,7 @@ document.addEventListener('pointercancel', () => { if (gesture?.source === 'mous
     if (!document.hidden) syncDay();
   });
   window.addEventListener('pageshow', syncDay);
-  window.visualViewport?.addEventListener('resize', () => {
-    const keyboardOpen = innerHeight - visualViewport.height > 135;
-    const viewport = document.documentElement;
-    viewport.style.setProperty('--keyboard-viewport-height', visualViewport.height + 'px');
-    viewport.classList.toggle('keyboard-open', keyboardOpen);
-    if (keyboardOpen && document.activeElement?.matches('.shell textarea')) {
-      document.activeElement.scrollIntoView({ block: 'nearest' });
-    }
-  });
+  trackKeyboardLayout();
   if (!preview && 'serviceWorker' in navigator && window.isSecureContext) {
     navigator.serviceWorker.register('./service-worker.js').catch(error => console.warn('Offline-Cache:', error));
   }
