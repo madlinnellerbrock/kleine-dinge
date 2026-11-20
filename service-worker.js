@@ -1,6 +1,6 @@
 const scope = self.registration.scope;
 const prefix = 'kleine-dinge:' + scope + ':';
-const cacheName = prefix + 'v2.0.39';
+const cacheName = prefix + 'v2.0.41';
 const shell = new URL('index.html', scope).href;
 const files = [
   'index.html', 'style.css', 'app.js', 'store.js', 'emoji.js', 'manifest.webmanifest', 'icon.svg',

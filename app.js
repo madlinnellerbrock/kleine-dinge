@@ -250,7 +250,7 @@ function render({ scroll = false } = {}) {
 }
 
 function findEditor(type, id) {
-  return root.querySelector(`textarea[data-edit="${type}"][data-id="${CSS.escape(id)}"]`);
+  return root.querySelector(`[data-edit="${type}"][data-id="${CSS.escape(id)}"]`);
 }
 
 function size(field) {
@@ -583,17 +583,19 @@ function normalizeEmojiSearch(text) {
 
 function findEmoji(query) {
   if (/\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Modifier}|\u20E3/u.test(query)) {
-    const glyph = query.replace(/\uFE0F/g, '');
-    const matches = allEmoji.filter(emoji => emoji.replace(/\uFE0F/g, '').includes(glyph));
-    const exact = matches.find(emoji => emoji.replace(/\uFE0F/g, '') === glyph);
+    const glyph = toneFamily(query);
+    if (!glyph) return [];
+    const exact = neutralEmoji.get(glyph);
+    const matches = [...neutralEmoji].filter(([key]) => key.includes(glyph)).map(([, emoji]) => emoji);
     if (exact) return [exact, ...matches.filter(emoji => emoji !== exact)];
-    const segments = Intl.Segmenter ? [...new Intl.Segmenter('de', { granularity: 'grapheme' }).segment(query)] : [...query];
-    return segments.length === 1 ? [query, ...matches] : matches;
+    const unmodified = query.replace(/\p{Emoji_Modifier}/gu, '');
+    const segments = Intl.Segmenter ? [...new Intl.Segmenter('de', { granularity: 'grapheme' }).segment(unmodified)] : [...unmodified];
+    return segments.length === 1 ? [unmodified, ...matches] : matches;
   }
   const normalized = normalizeEmojiSearch(query);
   if (!normalized) return [];
   const words = normalized.split(' ');
-  emojiSearchIndex ??= allEmoji.map(emoji => {
+  emojiSearchIndex ??= [...neutralEmoji.values()].map(emoji => {
     const [name, keywords] = emojiAnnotations[emoji] ?? ['', ''];
     const aliases = emojiGroups.find(group => group.emoji === emoji)?.keywords ?? '';
     return { emoji, name: normalizeEmojiSearch(name), text: normalizeEmojiSearch([name, keywords, aliases].join(' ')) };
@@ -892,8 +894,13 @@ root.addEventListener('focusout', event => {
   }, 0);
 });
 
+let multilineEditor = null;
 root.addEventListener('input', event => {
   const field = event.target;
+  const allowLineBreak = multilineEditor === field;
+  multilineEditor = null;
+  // Some software keyboards deliver Return only after inserting the break.
+  if (!allowLineBreak && !event.isComposing && isReturnInput(event) && advanceFromEmptyEditor(field)) return;
   if (field.matches('.rich-note')) {
     updateNote(field);
     return;
@@ -1014,19 +1021,52 @@ function previousLine(field) {
   return true;
 }
 
+function advanceFromEmptyEditor(field) {
+  const { edit, id } = field.dataset;
+  if (edit === 'new-sub' || edit === 'sub-text') {
+    if (field.value.trim()) return false;
+    const parentId = edit === 'new-sub' ? id : locate(id)?.parent?.id;
+    const tasks = currentTasks();
+    const index = tasks.findIndex(task => task.id === parentId);
+    if (index < 0) return false;
+    const next = tasks[index + 1];
+    if (field.value) {
+      field.value = '';
+      size(field);
+    }
+    if (edit === 'new-sub') drafts.delete(edit + id);
+    focusEnd(next ? findEditor('task-text', next.id) : findEditor('new-task', tab));
+    return true;
+  }
+  if (edit !== 'note-text' && edit !== 'new-note') return false;
+  if (field.innerText.trim()) return false;
+  const category = currentCategory();
+  if (!category) return false;
+  const index = category.cards.findIndex(card => card.id === id);
+  if (edit === 'note-text' && index < 0) return false;
+
+  field.replaceChildren();
+  updateNote(field);
+  if (edit === 'note-text') {
+    const next = category.cards[index + 1];
+    focusEnd(next ? findEditor('note-text', next.id) : findEditor('new-note', category.id));
+  }
+  return true;
+}
+
+function isReturnInput(event) {
+  return event.inputType === 'insertLineBreak' || event.inputType === 'insertParagraph' ||
+    (event.inputType === 'insertText' && event.data === '\n');
+}
+
 function enter(field) {
   const { edit, id } = field.dataset;
+  if (advanceFromEmptyEditor(field)) return true;
   if (edit === 'note-text') return false;
   if (edit === 'new-note') {
     const cursor = noteRange(field)?.startContainer;
     const element = cursor?.nodeType === 1 ? cursor : cursor?.parentElement;
     if (field.contains(element?.closest('ul, ol') ?? null)) return false;
-  }
-  if (edit === 'new-sub' && !field.value.trim()) {
-    const tasks = currentTasks();
-    const next = tasks[tasks.findIndex(task => task.id === id) + 1];
-    focusEnd(next ? findEditor('task-text', next.id) : findEditor('new-task', tab));
-    return true;
   }
   if (edit.startsWith('new-')) createFrom(field);
   else {
@@ -1039,7 +1079,6 @@ function enter(field) {
   return true;
 }
 
-let multilineEditor = null;
 root.addEventListener('keydown', event => {
   const field = event.target;
   multilineEditor = null;
@@ -1063,11 +1102,9 @@ root.addEventListener('keyup', event => {
 
 root.addEventListener('beforeinput', event => {
   const field = event.target;
-  const allowLineBreak = multilineEditor === field;
-  multilineEditor = null;
   if (!event.cancelable || !field.matches('textarea[data-edit], .rich-note') || event.isComposing) return;
   if (event.inputType === 'deleteContentBackward' && field.matches('textarea') && !field.value && previousLine(field)) event.preventDefault();
-  if (!allowLineBreak && ['insertLineBreak', 'insertParagraph'].includes(event.inputType) && enter(field)) {
+  if (multilineEditor !== field && isReturnInput(event) && enter(field)) {
     event.preventDefault();
   }
 });
