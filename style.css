@@ -49,14 +49,8 @@ button svg { display: block; flex-shrink: 0; }
   top: var(--keyboard-viewport-top, 0px);
 }
 .keyboard-open .shell {
-  --keyboard-clearance: 12px;
-  height: calc(var(--keyboard-viewport-height) - var(--keyboard-clearance));
-  align-self: start;
+  padding-bottom: 0;
   overflow-anchor: none;
-}
-@supports (-webkit-touch-callout: none) {
-  /* The iOS input accessory can cover part of the visual viewport. */
-  .keyboard-open .shell { --keyboard-clearance: 64px; }
 }
 
 .shell {

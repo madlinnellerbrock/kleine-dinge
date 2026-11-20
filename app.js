@@ -1293,7 +1293,7 @@ function trackKeyboardLayout() {
       return;
     }
     const viewportTop = Math.max(0, visual.offsetTop);
-    // Give the list a scrollport that ends above the keyboard and its accessory bar.
+    // The list fills the visible viewport while the keyboard is open.
     page.style.setProperty('--keyboard-viewport-height', viewportHeight + 'px');
     page.style.setProperty('--keyboard-viewport-top', viewportTop + 'px');
     page.classList.add('keyboard-open');
@@ -1301,7 +1301,7 @@ function trackKeyboardLayout() {
 
     const shellBounds = shell.getBoundingClientRect();
     const visibleTop = shellBounds.top;
-    const visibleBottom = shellBounds.bottom - 8;
+    const visibleBottom = shellBounds.bottom;
     const container = editor.closest('.newtask, .note-editor') ?? editor;
     const cardBounds = container.getBoundingClientRect();
     const bounds = cardBounds.height <= visibleBottom - visibleTop ? cardBounds : editor.getBoundingClientRect();
