@@ -448,6 +448,20 @@ dialog::backdrop { background: #271e176e; }
 }
 
 body { background: var(--canvas); }
+.status-bar-background { display: none; }
+@media (display-mode: standalone) and (max-width: 699px) {
+  :root, body { background-color: var(--forest); }
+  /* Opaque top edge for iOS to sample when it tints the system status bar. */
+  .status-bar-background {
+    display: block;
+    position: fixed;
+    inset: 0 0 auto;
+    height: max(12px, env(safe-area-inset-top));
+    background: var(--forest);
+    pointer-events: none;
+    z-index: 2;
+  }
+}
 .shell {
   --header-height: calc(204px + env(safe-area-inset-top));
   --header-overlap: 28px;
@@ -472,8 +486,8 @@ body { background: var(--canvas); }
     max(23px, env(safe-area-inset-left));
   color: var(--card);
   background-color: var(--forest);
-  background-image: radial-gradient(at 90% 0%, #28473a 0, transparent 63%), var(--light-grain);
-  background-size: auto, 5px 5px;
+  background-image: var(--light-grain);
+  background-size: 5px 5px;
 }
 
 .header.category-header {
