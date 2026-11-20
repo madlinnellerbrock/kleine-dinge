@@ -1,6 +1,7 @@
 const store = (() => {
   const databaseName = document.documentElement.hasAttribute('data-preview') ? 'kleine-dinge-vorschau' : 'kleine-dinge';
   const backupKey = databaseName + '-fallback';
+  const defaultEmoji = '🪴';
   const uid = () => globalThis.crypto?.randomUUID?.() ?? Date.now() + '-' + Math.random().toString(36).slice(2);
   let db;
   let queue = Promise.resolve();
@@ -14,6 +15,7 @@ const store = (() => {
   function fresh() {
     return {
       version: 2,
+      defaultEmoji,
       tasks: [],
       categories: [
         ['🌷', 'Mein ideales Ich'], ['☕', 'Mein idealer Alltag'],
@@ -36,9 +38,10 @@ const store = (() => {
       return { id: value.id, [field]: value[field] };
     }
 
-    const emoji = value => typeof value === 'string' && value ? value : '🪴';
+    const emoji = value => typeof value === 'string' && value.trim() ? value : defaultEmoji;
     return {
       version: 2,
+      defaultEmoji: emoji(input.defaultEmoji),
       savedAt: Number.isFinite(input.savedAt) ? input.savedAt : 0,
       tasks: input.tasks.map(task => {
         const base = item(task, 'text');

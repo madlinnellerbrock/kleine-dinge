@@ -10,7 +10,11 @@ const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[character]);
-const tabs = [['today', 'sun', 'Heute'], ['someday', 'inbox', 'Irgendwann'], ['self', 'heart', 'Mein Ich']];
+const tabs = [
+  ['today', 'sun', 'Heute'],
+  ['someday', 'inbox', 'Irgendwann', 'Hat noch Zeit'],
+  ['self', 'heart', 'Mein Raum', 'Was mir wichtig ist']
+];
 const drafts = new Map();
 const draftEmojis = new Map();
 let data;
@@ -59,7 +63,7 @@ function syncDay() {
     }
   }
   if (changed) persist();
-  const date = $('.eyebrow');
+  const date = $('[data-header-date]');
   if (date) date.textContent = dateLabel();
 }
 
@@ -68,7 +72,12 @@ function dateLabel() {
 }
 
 function suggest(text) {
-  return emojiGroups.find(group => group.words.test(text))?.emoji ?? '🪴';
+  return emojiGroups.find(group => group.words.test(text))?.emoji ?? data.defaultEmoji;
+}
+
+function updateDraftEmoji(field) {
+  const marker = field.closest('.newtask')?.querySelector('.emoji');
+  if (marker) marker.textContent = draftEmojis.get(field.dataset.edit + field.dataset.id) ?? suggest(field.value);
 }
 
 function editor(type, id, value = '', placeholder = '', label = placeholder) {
@@ -104,20 +113,34 @@ function frame(item, kind, body) {
   </div>`;
 }
 
+function subtaskToggle(task) {
+  return button('collapse', task.id, 'Unteraufgaben anzeigen oder einklappen', svg('chevron'),
+    'chevron', `aria-expanded="${!task.collapsed}"`);
+}
+
+function subtaskProgress(task) {
+  return `${task.children.filter(child => child.done).length} von ${task.children.length} erledigt`;
+}
+
+function subtaskCard(child) {
+  return frame(child, 'sub', `<div class="subrow face ${child.done ? 'completed' : ''}">
+    ${check(child)}<div class="grow">${editor('sub-text', child.id, child.text, 'Unteraufgabe')}</div>
+  </div>`);
+}
+
 function taskCard(task) {
   return frame(task, 'task', `<article class="task face ${task.done ? 'completed' : ''}">
     <div class="taskrow">
       ${tile(task.emoji, task.id)}
-      <div class="grow">${editor('task-text', task.id, task.text, 'Aufgabe', 'Aufgabentext')}</div>
-      ${task.children.length ? button('collapse', task.id, 'Unteraufgaben anzeigen oder einklappen', svg('chevron'),
-        'chevron', `aria-expanded="${!task.collapsed}"`) : ''}
+      <div class="grow task-summary">
+        ${editor('task-text', task.id, task.text, 'Aufgabe', 'Aufgabentext')}
+        ${task.children.length ? `<div class="progress">${subtaskProgress(task)}</div>` : ''}
+      </div>
+      ${task.children.length ? subtaskToggle(task) : ''}
       ${check(task)}
     </div>
-    ${task.children.length ? `<div class="progress">${task.children.filter(child => child.done).length} von ${task.children.length} erledigt</div>` : ''}
     <div class="subs" ${task.collapsed || !task.children.length ? 'hidden' : ''}>
-      ${task.children.map(child => frame(child, 'sub', `<div class="subrow face ${child.done ? 'completed' : ''}">
-        ${check(child)}<div class="grow">${editor('sub-text', child.id, child.text, 'Unteraufgabe')}</div>
-      </div>`)).join('')}
+      ${task.children.map(subtaskCard).join('')}
     </div>
   </article>`);
 }
@@ -137,11 +160,12 @@ function categoryCard(category) {
 }
 
 function render({ scroll = false } = {}) {
+  const scrollTop = scroll ? 0 : root.querySelector('.shell')?.scrollTop ?? 0;
   activeTask = null;
   revealed = null;
   const category = currentCategory();
-  const [, , title] = tabs.find(([key]) => key === tab);
-  const heading = category ? category.emoji + ' ' + category.title : title + { today: ' ☀️', someday: ' 🍃', self: ' 🤎' }[tab];
+  const [, , title, caption] = tabs.find(([key]) => key === tab);
+  const heading = category?.title ?? title;
   let type = 'new-task';
   let id = tab;
   let placeholder = 'Neue Aufgabe …';
@@ -160,10 +184,11 @@ function render({ scroll = false } = {}) {
     cards = currentTasks().map(taskCard);
   }
   root.innerHTML = `<main class="shell">
-    ${category ? button('back', '', 'Zurück zu Mein Ich', svg('back') + ' Mein Ich', 'back') : ''}
-    <header class="header">
-      <div>${tab === 'today' ? `<p class="eyebrow">${esc(dateLabel())}</p>` : ''}<h1 class="title">${esc(heading)}</h1></div>
-      ${category ? '' : button('settings', '', 'Einstellungen', svg('settings'), 'toolbar')}
+    <header class="header${category ? ' category-header' : ''}">
+      ${category ? button('back', '', 'Zurück zu „' + title + '“', svg('back') + ' ' + esc(title), 'back') :
+        button('settings', '', 'Einstellungen', svg('settings'), 'toolbar')}
+      ${category ? '' : `<p class="eyebrow"${tab === 'today' ? ' data-header-date' : ''}>${esc(tab === 'today' ? dateLabel() : caption)}</p>`}
+      <h1 class="title${category ? ' category-title' : ''}">${esc(heading)}</h1>
     </header>
     <div class="list">${cards.join('')}
       <div class="newtask">
@@ -178,7 +203,7 @@ function render({ scroll = false } = {}) {
     button('nav', key, label, svg(glyph) + `<span>${label}</span>`, tab === key ? 'active' : '',
       tab === key ? 'aria-current="page"' : '')).join('')}</nav>`;
   root.querySelectorAll('textarea').forEach(size);
-  if (scroll) window.scrollTo(0, 0);
+  root.querySelector('.shell').scrollTop = scrollTop;
 }
 
 function findEditor(type, id) {
@@ -187,7 +212,8 @@ function findEditor(type, id) {
 
 function size(field) {
   field.style.height = 'auto';
-  field.style.height = Math.max(28, field.scrollHeight) + 'px';
+  const minHeight = field.matches('.task-summary > .editable:not(:last-child)') ? 22 : 28;
+  field.style.height = Math.max(minHeight, field.scrollHeight) + 'px';
   field.closest('.noterow')?.classList.toggle('multiline', field.scrollHeight > 37);
 }
 
@@ -241,7 +267,7 @@ function replaceTask(id) {
   if (focused) activateTask(id);
 }
 
-function createFrom(field) {
+function createFrom(field, { keepFocus = true } = {}) {
   const { edit, id } = field.dataset;
   const text = field.value.trim();
   if (!text) return;
@@ -267,27 +293,28 @@ function createFrom(field) {
   if (edit === 'new-sub') {
     const task = locate(id).item;
     const face = taskFace(id);
-    const scratch = document.createElement('template');
-    scratch.innerHTML = taskCard(task);
-    const next = scratch.content.querySelector('.task');
+    const subs = face.querySelector('.subs');
     if (!face.querySelector('.chevron')) {
-      face.querySelector('.check-target').before(next.querySelector('.chevron'));
-      face.querySelector('.subs').before(next.querySelector('.progress'));
+      face.querySelector('.taskrow > .check-target').insertAdjacentHTML('beforebegin', subtaskToggle(task));
+      const summary = face.querySelector('.task-summary');
+      summary.insertAdjacentHTML('beforeend', '<div class="progress"></div>');
+      size(summary.querySelector('textarea'));
     }
     face.querySelector('.chevron').setAttribute('aria-expanded', 'true');
-    face.querySelector('.progress').textContent = next.querySelector('.progress').textContent;
-    face.querySelector('.subs').replaceWith(next.querySelector('.subs'));
-    face.querySelectorAll('.subs textarea').forEach(size);
+    face.querySelector('.progress').textContent = subtaskProgress(task);
+    subs.insertAdjacentHTML('beforeend', subtaskCard(task.children.at(-1)));
+    subs.hidden = false;
+    subs.querySelectorAll('textarea').forEach(size);
   } else {
     const composer = field.closest('.newtask');
     if (edit === 'new-task') composer.insertAdjacentHTML('beforebegin', taskCard(data.tasks.at(-1)));
     if (edit === 'new-category') composer.insertAdjacentHTML('beforebegin', categoryCard(data.categories.at(-1)));
     if (edit === 'new-note') composer.insertAdjacentHTML('beforebegin', noteCard(currentCategory().cards.at(-1)));
     composer.previousElementSibling.querySelectorAll('textarea').forEach(size);
-    composer.querySelector('.emoji').textContent = '🪴';
+    updateDraftEmoji(field);
   }
   size(field);
-  focusEnd(field);
+  if (keepFocus) focusEnd(field);
 }
 
 function toast(message, undo) {
@@ -437,14 +464,18 @@ function itemMenu(id) {
   ].join(''));
 }
 
-function settings() {
+function settings(focusSelector) {
+  const currentEmoji = data.defaultEmoji;
+  const emojiName = emojiAnnotations[currentEmoji]?.[0] ?? currentEmoji;
   sheet('Deine App 🌱', `
+    ${button('default-emoji', '', 'Standard-Emoji ändern, aktuell ' + emojiName,
+      '<span aria-hidden="true">' + esc(currentEmoji) + '</span> Standard-Emoji ändern', 'setting')}
     ${button('backup', '', 'Backup exportieren', 'Backup exportieren', 'setting')}
     ${button('import', '', 'Backup importieren', 'Backup importieren', 'setting')}
     ${button('reset', '', 'Alle Daten zurücksetzen', 'Alle Daten zurücksetzen', 'setting danger')}
     <p class="hintline">Deine Aufgaben und Gedanken bleiben auf diesem Gerät. Mit einem Backup kannst du sie mitnehmen.</p>
     <p class="hintline">Für Kartenaktionen am Computer mit der rechten Maustaste klicken. Auf dem Handy kannst du wischen oder eine Karte gedrückt halten.</p>
-    ${preview ? '<p class="hintline">Testvorschau mit eigenem Datenspeicher. Für die iPhone-Installation ist die über HTTPS veröffentlichte Version vorgesehen.</p>' : ''}`);
+    ${preview ? '<p class="hintline">Testvorschau mit eigenem Datenspeicher. Für die iPhone-Installation ist die über HTTPS veröffentlichte Version vorgesehen.</p>' : ''}`, focusSelector);
 }
 
 const emojiGroups = [
@@ -462,33 +493,173 @@ const emojiGroups = [
   ['📅', 'termin|kalender'], ['🎁', 'geschenk|geburtstag'], ['🐈', 'katze|tier']
 ].map(([emoji, keywords]) => ({ emoji, keywords, words: new RegExp('(^|[^\\p{L}])(?:' + keywords + ')(?=$|[^\\p{L}])', 'iu') }));
 
-const allEmoji = [...new Set(Object.values(emojiSets).flat())];
-const searchableEmoji = [...new Set([...allEmoji, ...emojiGroups.map(group => group.emoji), ...emojiCatalog])];
+const allEmoji = [...new Set([...emojiCatalog, ...Object.values(emojiSets).flat(), ...emojiGroups.map(group => group.emoji)])];
+let emojiSearchIndex;
 
-function emojiPicker(id, { draft = false } = {}) {
-  if (!draft && !locate(id)) return;
-  sheet('Emoji auswählen', `<input class="search" type="search" aria-label="Emoji suchen oder einfügen"
+const toneAliases = {
+  '🫱‍🫲': '🤝', '👩‍🤝‍👩': '👭', '👩‍🤝‍👨': '👫', '👨‍🤝‍👨': '👬',
+  '🧑‍❤‍💋‍🧑': '💏', '🧑‍❤‍🧑': '💑',
+  '🧑‍🫯‍🧑': '🤼', '👨‍🫯‍👨': '🤼‍♂', '👩‍🫯‍👩': '🤼‍♀',
+  '🧑‍🐰‍🧑': '👯', '👨‍🐰‍👨': '👯‍♂', '👩‍🐰‍👩': '👯‍♀'
+};
+
+function toneFamily(emoji) {
+  const base = emoji.replace(/[\p{Emoji_Modifier}\uFE0F]/gu, '');
+  return toneAliases[base] ?? base;
+}
+
+const emojiTones = new Map();
+const neutralEmoji = new Map(allEmoji.filter(emoji => !/\p{Emoji_Modifier}/u.test(emoji))
+  .map(emoji => [toneFamily(emoji), emoji]));
+for (const emoji of allEmoji) {
+  if (!/\p{Emoji_Modifier}/u.test(emoji)) continue;
+  const family = toneFamily(emoji);
+  if (!family) continue;
+  if (!emojiTones.has(family)) emojiTones.set(family, neutralEmoji.has(family) ? [neutralEmoji.get(family)] : []);
+  emojiTones.get(family).push(emoji);
+}
+
+function normalizeEmojiSearch(text) {
+  return text.toLocaleLowerCase('de').normalize('NFD').replace(/\p{M}/gu, '')
+    .replace(/ß/g, 'ss').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+function findEmoji(query) {
+  if (/\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Modifier}|\u20E3/u.test(query)) {
+    const glyph = query.replace(/\uFE0F/g, '');
+    const matches = allEmoji.filter(emoji => emoji.replace(/\uFE0F/g, '').includes(glyph));
+    const exact = matches.find(emoji => emoji.replace(/\uFE0F/g, '') === glyph);
+    if (exact) return [exact, ...matches.filter(emoji => emoji !== exact)];
+    const segments = Intl.Segmenter ? [...new Intl.Segmenter('de', { granularity: 'grapheme' }).segment(query)] : [...query];
+    return segments.length === 1 ? [query, ...matches] : matches;
+  }
+  const normalized = normalizeEmojiSearch(query);
+  if (!normalized) return [];
+  const words = normalized.split(' ');
+  emojiSearchIndex ??= allEmoji.map(emoji => {
+    const [name, keywords] = emojiAnnotations[emoji] ?? ['', ''];
+    const aliases = emojiGroups.find(group => group.emoji === emoji)?.keywords ?? '';
+    return { emoji, name: normalizeEmojiSearch(name), text: normalizeEmojiSearch([name, keywords, aliases].join(' ')) };
+  });
+  const exact = [];
+  const related = [];
+  for (const entry of emojiSearchIndex) {
+    if (entry.name === normalized) exact.push(entry.emoji);
+    else if (words.every(word => entry.text.includes(word))) related.push(entry.emoji);
+  }
+  return [...exact, ...related];
+}
+
+function setupEmojiTones(grid, popup, choice) {
+  const sheetBody = grid.closest('.sheet');
+  let timer;
+  let press;
+  let anchor;
+  let ignoreClick;
+
+  function cancelPress() {
+    clearTimeout(timer);
+    press = null;
+  }
+
+  function dismiss(restoreFocus = false) {
+    cancelPress();
+    if (restoreFocus) anchor?.focus({ preventScroll: true });
+    if (anchor) anchor.setAttribute('aria-expanded', 'false');
+    anchor = null;
+    popup.hidden = true;
+  }
+
+  function open(control, focusOption = false) {
+    const tones = emojiTones.get(toneFamily(control.dataset.emoji));
+    if (!tones || !control.isConnected || !dialog.open) return;
+    dismiss();
+    anchor = control;
+    control.setAttribute('aria-expanded', 'true');
+    popup.innerHTML = tones.map(emoji => choice(emoji)).join('');
+    popup.hidden = false;
+
+    const box = control.getBoundingClientRect();
+    const sheetBox = sheetBody.getBoundingClientRect();
+    const dialogBox = dialog.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const top = Math.max(dialogBox.top, viewport?.offsetTop ?? 0) + 6;
+    const bottom = Math.min(dialogBox.bottom, (viewport?.offsetTop ?? 0) + (viewport?.height ?? innerHeight)) - 6;
+    const above = box.top - top - 6;
+    const below = bottom - box.bottom - 6;
+    const putAbove = above >= popup.scrollHeight || above >= below;
+    popup.style.maxHeight = Math.max(48, putAbove ? above : below) + 'px';
+    const left = (box.left + box.right - popup.offsetWidth) / 2 - sheetBox.left;
+    popup.style.left = Math.max(6, Math.min(left, sheetBox.width - popup.offsetWidth - 6)) + 'px';
+    popup.style.top = (putAbove ? box.top - popup.offsetHeight - 6 : box.bottom + 6) - sheetBox.top + 'px';
+    popup.scrollTop = 0;
+    if (focusOption) popup.querySelector('button')?.focus({ preventScroll: true });
+  }
+
+  sheetBody.addEventListener('pointerdown', event => {
+    ignoreClick = null;
+    if (popup.contains(event.target)) return;
+    dismiss();
+    const control = event.target.closest('.emojigrid [aria-expanded]');
+    if (!control || !event.isPrimary || event.button !== 0) return;
+    press = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    timer = setTimeout(() => {
+      open(control);
+      if (anchor === control) ignoreClick = control;
+    }, 450);
+  });
+  sheetBody.addEventListener('pointermove', event => {
+    if (press?.id === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 9) cancelPress();
+  });
+  for (const event of ['pointerup', 'pointercancel', 'pointerleave']) sheetBody.addEventListener(event, cancelPress);
+  grid.addEventListener('scroll', () => dismiss(), { passive: true });
+  grid.addEventListener('contextmenu', event => {
+    if (event.target.closest('[aria-expanded]')) event.preventDefault();
+  });
+  grid.addEventListener('click', event => {
+    if (ignoreClick && ignoreClick.contains(event.target)) {
+      event.preventDefault();
+      event.stopPropagation();
+      ignoreClick = null;
+    }
+  });
+  sheetBody.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && anchor) {
+      event.preventDefault();
+      event.stopPropagation();
+      dismiss(true);
+    } else if (event.key === 'ArrowUp' && event.target.matches('.emojigrid [aria-expanded]')) {
+      event.preventDefault();
+      open(event.target, true);
+    }
+  });
+  return dismiss;
+}
+
+function emojiPicker(id, { draft = false, forDefault = false } = {}) {
+  if (!draft && !forDefault && !locate(id)) return;
+  const categories = [...Object.keys(emojiSets), 'Alle'];
+  let group = categories[0];
+  sheet(forDefault ? 'Standard-Emoji auswählen' : 'Emoji auswählen', `<input class="search" type="search" aria-label="Emoji suchen oder einfügen"
     placeholder="Emoji suchen oder einfügen …" autocomplete="off">
-    <div class="emoji-cats">${['Alle', ...Object.keys(emojiSets)].map((name, i) =>
-      `<button type="button" data-set="${esc(name)}" aria-pressed="${i === 0}">${esc(name)}</button>`).join('')}</div>
-    <div class="emojigrid"></div><p class="hintline">Die Darstellung der Emojis hängt von deiner iOS-Version ab.</p>`);
-  let group = 'Alle';
+    <div class="emoji-cats">${categories.map(name =>
+      `<button type="button" data-set="${esc(name)}" aria-pressed="${name === group}">${esc(name)}</button>`).join('')}</div>
+    <div class="emojigrid"></div><div class="emoji-tones" id="emoji-tones" role="group" aria-label="Hauttöne" hidden></div>
+    <p class="hintline">Für Hauttöne ein Emoji gedrückt halten. Über das Suchfeld kannst du auch Emojis einfügen.</p>`);
   const search = dialog.querySelector('.search');
+  const grid = dialog.querySelector('.emojigrid');
+  function choice(emoji, extra = '') {
+    return button(forDefault ? 'save-default-emoji' : 'choose-emoji', id, emojiAnnotations[emoji]?.[0] || emoji, esc(emoji), '',
+      `data-emoji="${esc(emoji)}" ${draft ? 'data-draft' : ''} ${extra}`);
+  }
+  const dismissTones = setupEmojiTones(grid, dialog.querySelector('.emoji-tones'), choice);
 
   function fill() {
-    const query = search.value.toLocaleLowerCase('de').trim();
-    let options = group === 'Alle' ? allEmoji : emojiSets[group];
-    if (query) {
-      options = searchableEmoji.filter(emoji => emoji.includes(query) ||
-        emojiGroups.some(entry => entry.emoji === emoji && entry.keywords.includes(query)));
-      const first = Intl.Segmenter ? [...new Intl.Segmenter('de', { granularity: 'grapheme' }).segment(query)] : [...query];
-      if (first.length === 1 && /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20E3/u.test(query)) {
-        options = [...new Set([query, ...options])];
-      }
-    }
-    const grid = dialog.querySelector('.emojigrid');
-    grid.innerHTML = options.length ? options.map(emoji =>
-      button('choose-emoji', id, emoji, esc(emoji), '', `data-emoji="${esc(emoji)}" ${draft ? 'data-draft' : ''}`)).join('') :
+    dismissTones();
+    const query = search.value.trim();
+    const options = query ? findEmoji(query) : group === 'Alle' ? allEmoji : emojiSets[group];
+    grid.innerHTML = options.length ? options.map(emoji => choice(emoji, emojiTones.has(toneFamily(emoji))
+      ? 'aria-controls="emoji-tones" aria-expanded="false" aria-keyshortcuts="ArrowUp"' : '')).join('') :
       '<p class="hintline">Keine Emojis gefunden.</p>';
     grid.scrollTop = 0;
   }
@@ -545,9 +716,7 @@ function trigger(control) {
       face.classList.toggle('completed', entry.item.done);
       control.setAttribute('aria-checked', String(entry.item.done));
       if (entry.parent) {
-        const children = entry.parent.children;
-        taskFace(entry.parent.id).querySelector('.progress').textContent =
-          `${children.filter(child => child.done).length} von ${children.length} erledigt`;
+        taskFace(entry.parent.id).querySelector('.progress').textContent = subtaskProgress(entry.parent);
       }
       persist();
       break;
@@ -564,6 +733,15 @@ function trigger(control) {
     }
     case 'emoji': emojiPicker(id); break;
     case 'draft-emoji': emojiPicker(id, { draft: true }); break;
+    case 'default-emoji': emojiPicker('', { forDefault: true }); break;
+    case 'save-default-emoji': {
+      data.defaultEmoji = control.dataset.emoji;
+      const field = root.querySelector('.newtask textarea');
+      if (field) updateDraftEmoji(field);
+      persist();
+      settings('[data-action="default-emoji"]');
+      break;
+    }
     case 'choose-emoji': {
       const value = control.dataset.emoji;
       const draft = control.hasAttribute('data-draft');
@@ -600,10 +778,21 @@ function trigger(control) {
 }
 
 let suppressClickUntil = 0;
+let pressedComposer = null;
+document.addEventListener('pointerdown', event => {
+  pressedComposer = event.target.closest('.newtask');
+});
+document.addEventListener('pointercancel', () => { pressedComposer = null; });
+document.addEventListener('keydown', () => { pressedComposer = null; }, { capture: true });
 document.addEventListener('click', event => {
+  pressedComposer = null;
   if (performance.now() < suppressClickUntil && root.contains(event.target)) {
     event.preventDefault();
     return;
+  }
+  const field = root.querySelector('textarea.new-task');
+  if (field && !dialog.open && !field.closest('.newtask').contains(event.target)) {
+    createFrom(field, { keepFocus: false });
   }
   const control = event.target.closest('[data-action]');
   if (control) {
@@ -629,6 +818,14 @@ root.addEventListener('focusin', event => {
 });
 
 root.addEventListener('focusout', event => {
+  const composer = event.target.closest('.newtask');
+  const field = composer?.querySelector('textarea.new-task');
+  if (field) {
+    // Safari can report no next focus target when tapping the composer's own buttons.
+    const next = event.relatedTarget ?? pressedComposer;
+    if (!dialog.open && !composer.contains(next)) createFrom(field, { keepFocus: false });
+    return;
+  }
   const face = event.target.closest('.task');
   if (!face || activeTask !== face.parentElement.dataset.item || face.contains(event.relatedTarget)) return;
   if (event.relatedTarget) deactivateTask();
@@ -643,8 +840,7 @@ root.addEventListener('input', event => {
   const { edit, id } = field.dataset;
   if (edit.startsWith('new-')) {
     drafts.set(edit + id, field.value);
-    const marker = field.closest('.newtask')?.querySelector('.emoji');
-    if (marker) marker.textContent = draftEmojis.get(edit + id) ?? suggest(field.value);
+    updateDraftEmoji(field);
   } else {
     const entry = locate(id);
     if (entry) {
@@ -784,12 +980,14 @@ function updateDrop() {
 
 function dragScroll() {
   if (gesture?.mode !== 'drag') return;
-  const edge = Math.min(108, innerHeight / 4);
-  const low = $('.nav').getBoundingClientRect().top - 12;
+  const scrollArea = root.querySelector('.shell');
+  const { top, bottom, height } = scrollArea.getBoundingClientRect();
+  const edge = top + Math.min(108, height / 4);
+  const low = bottom - 12;
   const y = gesture.lastY;
   const delta = gesture.moved && (y < edge ? -Math.min(12, (edge - y) / 3) : y > low ? Math.min(12, (y - low) / 3) : 0);
   if (delta) {
-    window.scrollBy(0, delta);
+    scrollArea.scrollBy(0, delta);
     updateDrop();
   }
   gesture.raf = requestAnimationFrame(dragScroll);
@@ -879,7 +1077,12 @@ document.addEventListener('pointercancel', () => { if (gesture?.source === 'mous
   window.addEventListener('pageshow', syncDay);
   window.visualViewport?.addEventListener('resize', () => {
     const keyboardOpen = innerHeight - visualViewport.height > 135;
-    document.documentElement.classList.toggle('keyboard-open', keyboardOpen);
+    const viewport = document.documentElement;
+    viewport.style.setProperty('--keyboard-viewport-height', visualViewport.height + 'px');
+    viewport.classList.toggle('keyboard-open', keyboardOpen);
+    if (keyboardOpen && document.activeElement?.matches('.shell textarea')) {
+      document.activeElement.scrollIntoView({ block: 'nearest' });
+    }
   });
   if (!preview && 'serviceWorker' in navigator && window.isSecureContext) {
     navigator.serviceWorker.register('./service-worker.js').catch(error => console.warn('Offline-Cache:', error));

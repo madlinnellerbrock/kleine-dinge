@@ -1,10 +1,10 @@
 const scope = self.registration.scope;
 const prefix = 'kleine-dinge:' + scope + ':';
-const cacheName = prefix + 'v2.0.8';
+const cacheName = prefix + 'v2.0.29';
 const shell = new URL('index.html', scope).href;
 const files = [
   'index.html', 'style.css', 'app.js', 'store.js', 'emoji.js', 'manifest.webmanifest', 'icon.svg',
-  'icon-180.png', 'icon-192.png', 'icon-512.png'
+  'icon-180.png', 'icon-192.png', 'icon-512.png', 'plattenecke.webp'
 ].map(file => new URL(file, scope).href);
 
 self.addEventListener('install', event => {
