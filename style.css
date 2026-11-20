@@ -41,18 +41,13 @@ button svg { display: block; flex-shrink: 0; }
 }
 .keyboard-open #app { height: var(--app-full-height); }
 .keyboard-open .shell {
-  padding-bottom: calc(var(--keyboard-overlap, 0px) + 12px);
-  scroll-padding-bottom: calc(var(--keyboard-overlap, 0px) + 12px);
+  --keyboard-clearance: 12px;
+  padding-bottom: calc(var(--keyboard-overlap, 0px) + var(--keyboard-clearance));
+  scroll-padding-bottom: calc(var(--keyboard-overlap, 0px) + var(--keyboard-clearance));
 }
-.keyboard-open .shell:has(.newtask:focus-within) {
-  display: flex;
-  flex-direction: column;
-}
-.keyboard-open .shell:has(.newtask:focus-within) .header { flex: none; }
-.keyboard-open .list:has(.newtask:focus-within) {
-  display: flex;
-  flex-direction: column;
-  flex: 1 0 auto;
+@supports (-webkit-touch-callout: none) {
+  /* The iOS input accessory can cover part of the visual viewport. */
+  .keyboard-open .shell { --keyboard-clearance: 64px; }
 }
 
 .shell {
@@ -160,6 +155,39 @@ button svg { display: block; flex-shrink: 0; }
 .editable::placeholder { color: var(--muted); opacity: 1; }
 .note .editable, .subrow .editable, .subentry .editable, .newtask .editable { font-weight: 420; }
 .noterow.multiline { align-items: flex-start; }
+.rich-note {
+  min-height: 28px;
+  white-space: pre-wrap;
+  -webkit-user-select: text;
+}
+.rich-note[data-empty]::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  pointer-events: none;
+}
+.rich-note p, .rich-note ul, .rich-note ol { margin: 0; }
+.rich-note ul, .rich-note ol { padding-inline-start: 1.45rem; white-space: normal; }
+.rich-note li { white-space: pre-wrap; }
+.note-tools { display: none; }
+.note-editor:focus-within .note-tools, .newtask:focus-within .note-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 4px;
+}
+.note-tools button {
+  min-width: 32px;
+  min-height: 38px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 5px;
+  background: transparent;
+  color: var(--muted);
+}
+.note-tools button:hover, .note-tools button[aria-pressed="true"] {
+  background: var(--tile);
+  color: var(--accent);
+}
 .check-target {
   border: 0;
   border-radius: 9px;
@@ -612,7 +640,6 @@ body { background: var(--canvas); }
   background: #fffaef;
 }
 .newtask:focus-within { background: #fff8ea; border-color: var(--accent); }
-.keyboard-open .list > .newtask:focus-within { margin-top: auto; }
 .add { background: #f6e2cd; }
 .add:hover { background: #f3d8bb; }
 

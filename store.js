@@ -59,7 +59,8 @@ const store = (() => {
         const base = item(category, 'title');
         if (!Array.isArray(category.cards)) throw new Error('Ungültige Kategorie im Backup');
         return { ...base, emoji: emoji(category.emoji), cards: category.cards.map(card => ({
-          ...item(card, 'text'), emoji: emoji(card.emoji)
+          ...item(card, 'text'), emoji: emoji(card.emoji),
+          ...(typeof card.html === 'string' ? { html: card.html } : {})
         })) };
       })
     };

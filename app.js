@@ -17,6 +17,7 @@ const tabs = [
 ];
 const drafts = new Map();
 const draftEmojis = new Map();
+const noteDrafts = new Map();
 let data;
 let tab = 'today';
 let categoryId = null;
@@ -77,7 +78,7 @@ function suggest(text) {
 
 function updateDraftEmoji(field) {
   const marker = field.closest('.newtask')?.querySelector('.emoji');
-  if (marker) marker.textContent = draftEmojis.get(field.dataset.edit + field.dataset.id) ?? suggest(field.value);
+  if (marker) marker.textContent = draftEmojis.get(field.dataset.edit + field.dataset.id) ?? suggest(field.value ?? field.innerText);
 }
 
 function editor(type, id, value = '', placeholder = '', label = placeholder) {
@@ -86,6 +87,47 @@ function editor(type, id, value = '', placeholder = '', label = placeholder) {
 
 function button(action, id, label, contents, className = '', extra = '') {
   return `<button type="button" class="${className}" data-action="${action}" data-id="${esc(id)}" aria-label="${esc(label)}" ${extra}>${contents}</button>`;
+}
+
+const noteFormats = [
+  ['bold', 'Fett', '<strong>B</strong>'], ['italic', 'Kursiv', '<em>I</em>'],
+  ['underline', 'Unterstrichen', '<u>U</u>'], ['insertUnorderedList', 'Aufzählung', '• ≡'],
+  ['insertOrderedList', 'Nummerierte Liste', '1. ≡']
+];
+const noteTags = new Set(['div', 'p', 'b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'span']);
+const noteStyles = {
+  fontWeight: ['font-weight', /^(?:normal|bold|[1-9]00)$/],
+  fontStyle: ['font-style', /^(?:normal|italic|oblique)$/],
+  textDecorationLine: ['text-decoration-line', /^(?:none|underline)$/]
+};
+
+function safeNoteHtml(html) {
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  function serialize(node) {
+    if (node.nodeType === 3) return esc(node.textContent);
+    if (node.nodeType !== 1 || ['SCRIPT', 'STYLE', 'TEMPLATE'].includes(node.tagName)) return '';
+    const tag = node.localName;
+    if (tag === 'br') return '<br>';
+    const contents = Array.from(node.childNodes, serialize).join('');
+    if (!noteTags.has(tag)) return contents;
+    const style = Object.entries(noteStyles).flatMap(([property, [name, valid]]) => {
+      const value = node.style?.[property] ?? '';
+      return valid.test(value) ? [name + ':' + value] : [];
+    }).join(';');
+    return `<${tag}${style ? ' style="' + style + '"' : ''}>${contents}</${tag}>`;
+  }
+  return Array.from(template.content.childNodes, serialize).join('');
+}
+
+function noteEditor(type, id, text = '', placeholder, html) {
+  return `<div class="note-editor">
+    <div class="editable rich-note ${type}" contenteditable="true" role="textbox" aria-multiline="true"
+      aria-label="${esc(placeholder)}" data-placeholder="${esc(placeholder)}" data-edit="${type}" data-id="${esc(id)}"
+      spellcheck="true" ${text.trim() ? '' : 'data-empty'}>${html === undefined ? esc(text) : safeNoteHtml(html)}</div>
+    <div class="note-tools" role="group" aria-label="Textformatierung">${noteFormats.map(([command, label, glyph]) =>
+      button('format-note', command, label, glyph, '', 'aria-pressed="false" title="' + label + '"')).join('')}</div>
+  </div>`;
 }
 
 function tile(value, id) {
@@ -147,7 +189,7 @@ function taskCard(task) {
 
 function noteCard(note) {
   return frame(note, 'note', `<article class="note face"><div class="noterow">
-    ${tile(note.emoji, note.id)}<div class="grow">${editor('note-text', note.id, note.text, 'Gedanke')}</div>
+    ${tile(note.emoji, note.id)}<div class="grow">${noteEditor('note-text', note.id, note.text, 'Gedanke', note.html)}</div>
   </div></article>`);
 }
 
@@ -194,7 +236,8 @@ function render({ scroll = false } = {}) {
       <div class="newtask">
         ${button('draft-emoji', type + id, 'Emoji für neuen Eintrag auswählen',
           esc(draftEmojis.get(type + id) ?? suggest(drafts.get(type + id) ?? '')), 'emoji')}
-        <div class="grow">${editor(type, id, drafts.get(type + id), placeholder)}</div>
+        <div class="grow">${category ? noteEditor(type, id, drafts.get(type + id), placeholder, noteDrafts.get(id)) :
+          editor(type, id, drafts.get(type + id), placeholder)}</div>
         ${button('add', id, category ? 'Gedanken hinzufügen' : tab === 'self' ? 'Kategorie hinzufügen' : 'Aufgabe hinzufügen', svg('plus'), 'add')}
       </div>
     </div>
@@ -202,7 +245,7 @@ function render({ scroll = false } = {}) {
   <nav class="nav" aria-label="Hauptnavigation">${tabs.map(([key, glyph, label]) =>
     button('nav', key, label, svg(glyph) + `<span>${label}</span>`, tab === key ? 'active' : '',
       tab === key ? 'aria-current="page"' : '')).join('')}</nav>`;
-  root.querySelectorAll('textarea').forEach(size);
+  root.querySelectorAll('textarea, .rich-note').forEach(size);
   root.querySelector('.shell').scrollTop = scrollTop;
 }
 
@@ -211,16 +254,23 @@ function findEditor(type, id) {
 }
 
 function size(field) {
+  if (field.isContentEditable) {
+    field.closest('.noterow')?.classList.toggle('multiline', field.scrollHeight > 37);
+    return;
+  }
   field.style.height = 'auto';
   const minHeight = field.matches('.task-summary > .editable:not(:last-child)') ? 22 : 28;
   field.style.height = Math.max(minHeight, field.scrollHeight) + 'px';
-  field.closest('.noterow')?.classList.toggle('multiline', field.scrollHeight > 37);
 }
 
 function focusEnd(field) {
   if (!field) return;
   field.focus({ preventScroll: true });
-  field.setSelectionRange(field.value.length, field.value.length);
+  if (field.isContentEditable) {
+    const selection = document.getSelection();
+    selection.selectAllChildren(field);
+    selection.collapseToEnd();
+  } else field.setSelectionRange(field.value.length, field.value.length);
   field.scrollIntoView({ block: 'nearest' });
 }
 
@@ -269,7 +319,7 @@ function replaceTask(id) {
 
 function createFrom(field, { keepFocus = true } = {}) {
   const { edit, id } = field.dataset;
-  const text = field.value.trim();
+  const text = (field.value ?? field.innerText).trim();
   if (!text) return;
   const base = { id: store.uid(), emoji: draftEmojis.get(edit + id) ?? suggest(text) };
   if (edit === 'new-task') {
@@ -282,13 +332,17 @@ function createFrom(field, { keepFocus = true } = {}) {
   } else if (edit === 'new-note') {
     const category = currentCategory();
     if (!category) return;
-    category.cards.push({ ...base, text });
+    category.cards.push({ ...base, text, html: safeNoteHtml(field.innerHTML) });
+    noteDrafts.delete(id);
   } else if (edit === 'new-category') {
     data.categories.push({ ...base, title: text.replace(/\s*\n\s*/g, ' '), cards: [] });
   }
   drafts.delete(edit + id);
   draftEmojis.delete(edit + id);
-  field.value = '';
+  if (field.isContentEditable) {
+    field.replaceChildren();
+    field.setAttribute('data-empty', '');
+  } else field.value = '';
   persist();
   if (edit === 'new-sub') {
     const task = locate(id).item;
@@ -310,7 +364,7 @@ function createFrom(field, { keepFocus = true } = {}) {
     if (edit === 'new-task') composer.insertAdjacentHTML('beforebegin', taskCard(data.tasks.at(-1)));
     if (edit === 'new-category') composer.insertAdjacentHTML('beforebegin', categoryCard(data.categories.at(-1)));
     if (edit === 'new-note') composer.insertAdjacentHTML('beforebegin', noteCard(currentCategory().cards.at(-1)));
-    composer.previousElementSibling.querySelectorAll('textarea').forEach(size);
+    composer.previousElementSibling.querySelectorAll('textarea, .rich-note').forEach(size);
     updateDraftEmoji(field);
   }
   size(field);
@@ -389,6 +443,7 @@ function resetView() {
   categoryId = null;
   drafts.clear();
   draftEmojis.clear();
+  noteDrafts.clear();
   render();
 }
 
@@ -707,8 +762,9 @@ function trigger(control) {
       render({ scroll: true });
       break;
     case 'add':
-      createFrom(control.parentElement.querySelector('textarea'));
+      createFrom(control.parentElement.querySelector('[data-edit]'));
       break;
+    case 'format-note': formatNote(control); break;
     case 'tick': {
       const entry = locate(id);
       entry.item.done = !entry.item.done;
@@ -736,7 +792,7 @@ function trigger(control) {
     case 'default-emoji': emojiPicker('', { forDefault: true }); break;
     case 'save-default-emoji': {
       data.defaultEmoji = control.dataset.emoji;
-      const field = root.querySelector('.newtask textarea');
+      const field = root.querySelector('.newtask [data-edit]');
       if (field) updateDraftEmoji(field);
       persist();
       settings('[data-action="default-emoji"]');
@@ -836,6 +892,10 @@ root.addEventListener('focusout', event => {
 
 root.addEventListener('input', event => {
   const field = event.target;
+  if (field.matches('.rich-note')) {
+    updateNote(field);
+    return;
+  }
   if (!field.matches('textarea[data-edit]')) return;
   const { edit, id } = field.dataset;
   if (edit.startsWith('new-')) {
@@ -849,6 +909,77 @@ root.addEventListener('input', event => {
     }
   }
   size(field);
+});
+
+function updateNote(field) {
+  const { edit, id } = field.dataset;
+  const text = field.innerText;
+  const html = safeNoteHtml(field.innerHTML);
+  field.toggleAttribute('data-empty', !text.trim());
+  if (edit === 'new-note') {
+    drafts.set(edit + id, text);
+    noteDrafts.set(id, html);
+    updateDraftEmoji(field);
+  } else {
+    const note = locate(id)?.item;
+    if (note && (note.text !== text || note.html !== html)) {
+      Object.assign(note, { text, html });
+      persist();
+    }
+  }
+  size(field);
+}
+
+function noteRange(field) {
+  const selection = document.getSelection();
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+  return range && field.contains(range.commonAncestorContainer) ? range : null;
+}
+
+function updateNoteTools(field) {
+  for (const control of field.parentElement.querySelectorAll('[data-action="format-note"]')) {
+    control.setAttribute('aria-pressed', String(document.queryCommandState(control.dataset.id)));
+  }
+}
+
+let noteSelection;
+document.addEventListener('selectionchange', () => {
+  const field = document.activeElement;
+  if (!field?.matches('.rich-note')) return;
+  const range = noteRange(field);
+  if (!range) return;
+  noteSelection = { field, range: range.cloneRange() };
+  updateNoteTools(field);
+});
+
+function formatNote(control) {
+  const field = control.closest('.note-editor').querySelector('.rich-note');
+  const range = noteRange(field) ?? (noteSelection?.field === field ? noteSelection.range : null);
+  field.focus({ preventScroll: true });
+  if (range) {
+    const selection = document.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  } else focusEnd(field);
+  document.execCommand(control.dataset.id);
+  updateNote(field);
+  updateNoteTools(field);
+}
+
+root.addEventListener('mousedown', event => {
+  if (event.target.closest('.note-tools')) event.preventDefault();
+});
+
+root.addEventListener('paste', event => {
+  const field = event.target.closest('.rich-note');
+  if (!field) return;
+  event.preventDefault();
+  const text = event.clipboardData?.getData('text/plain');
+  if (text && document.execCommand('insertText', false, text)) updateNote(field);
+});
+
+root.addEventListener('drop', event => {
+  if (event.target.closest('.rich-note')) event.preventDefault();
 });
 
 function previousLine(field) {
@@ -884,6 +1015,11 @@ function previousLine(field) {
 function enter(field) {
   const { edit, id } = field.dataset;
   if (edit === 'note-text') return false;
+  if (edit === 'new-note') {
+    const cursor = noteRange(field)?.startContainer;
+    const element = cursor?.nodeType === 1 ? cursor : cursor?.parentElement;
+    if (field.contains(element?.closest('ul, ol') ?? null)) return false;
+  }
   if (edit === 'new-sub' && !field.value.trim()) {
     const tasks = currentTasks();
     const next = tasks[tasks.findIndex(task => task.id === id) + 1];
@@ -911,12 +1047,12 @@ root.addEventListener('keydown', event => {
     return;
   }
   if (event.key === 'Escape') setReveal(null);
-  if (!field.matches('textarea[data-edit]') || event.isComposing) return;
+  if (!field.matches('textarea[data-edit], .rich-note') || event.isComposing) return;
   if (event.key === 'Enter') {
     if (event.shiftKey) multilineEditor = field;
     else if (enter(field)) event.preventDefault();
   }
-  if (event.key === 'Backspace' && !field.value && previousLine(field)) event.preventDefault();
+  if (event.key === 'Backspace' && field.matches('textarea') && !field.value && previousLine(field)) event.preventDefault();
 });
 
 root.addEventListener('keyup', event => {
@@ -927,8 +1063,8 @@ root.addEventListener('beforeinput', event => {
   const field = event.target;
   const allowLineBreak = multilineEditor === field;
   multilineEditor = null;
-  if (!event.cancelable || !field.matches('textarea[data-edit]') || event.isComposing) return;
-  if (event.inputType === 'deleteContentBackward' && !field.value && previousLine(field)) event.preventDefault();
+  if (!event.cancelable || !field.matches('textarea[data-edit], .rich-note') || event.isComposing) return;
+  if (event.inputType === 'deleteContentBackward' && field.matches('textarea') && !field.value && previousLine(field)) event.preventDefault();
   if (!allowLineBreak && ['insertLineBreak', 'insertParagraph'].includes(event.inputType) && enter(field)) {
     event.preventDefault();
   }
@@ -948,7 +1084,7 @@ function setReveal(frame, direction) {
 
 root.addEventListener('contextmenu', event => {
   const frame = event.target.closest('[data-item]');
-  if (!frame || event.target.matches('textarea:focus')) return;
+  if (!frame || event.target.matches('textarea:focus') || event.target.closest('.rich-note:focus, .note-tools')) return;
   event.preventDefault();
   if (gesture) return;
   setReveal(null);
@@ -968,7 +1104,7 @@ function stopGesture() {
 }
 
 function startGesture(target, x, y, source) {
-  if (gesture || dialog.open || target.closest('.actions,.subentry,input,.emoji,.check-target,.chevron')) return;
+  if (gesture || dialog.open || target.closest('.actions,.subentry,input,.emoji,.check-target,.chevron,.rich-note:focus,.note-tools')) return;
   if (target.matches('textarea:focus')) return;
   const frame = target.closest('[data-item]');
   if (!frame) return;
@@ -1094,7 +1230,7 @@ function trackKeyboardLayout() {
 
   function update() {
     const editor = document.activeElement;
-    const editing = editor?.matches('textarea, input:not([type="file"])');
+    const editing = editor?.matches('textarea, .rich-note, input:not([type="file"])');
     const wasOpen = page.classList.contains('keyboard-open');
     const open = visual.scale === 1 && (editing || wasOpen) && fullHeight - visual.height > 135;
     page.classList.toggle('keyboard-open', open);
@@ -1105,13 +1241,18 @@ function trackKeyboardLayout() {
     const visibleBottom = visual.height + visual.offsetTop;
     page.style.setProperty('--app-full-height', fullHeight + 'px');
     const shell = root.querySelector('.shell');
-    const overlap = Math.max(0, Math.ceil(shell.getBoundingClientRect().bottom - visibleBottom));
+    const shellBounds = shell.getBoundingClientRect();
+    const overlap = Math.max(0, Math.ceil(shellBounds.bottom - visibleBottom));
     page.style.setProperty('--keyboard-overlap', overlap + 'px');
-    if (editor?.matches('.shell .newtask textarea')) {
-      shell.scrollTop = shell.scrollHeight - shell.clientHeight;
-    } else if (editor?.matches('.shell textarea') && editor.getBoundingClientRect().bottom > visibleBottom - 12) {
-      editor.scrollIntoView({ block: 'nearest' });
-    }
+    if (!editor?.matches('.shell textarea, .shell .rich-note, .shell input:not([type="file"])')) return;
+
+    const clearance = parseFloat(getComputedStyle(shell).getPropertyValue('--keyboard-clearance'));
+    const field = editor.closest('.newtask, .note-editor') ?? editor;
+    const availableBottom = Math.min(shellBounds.bottom, visibleBottom) - clearance;
+    const availableTop = Math.max(shellBounds.top, visual.offsetTop);
+    const bounds = field.getBoundingClientRect();
+    const scrollDistance = Math.min(bounds.bottom - availableBottom, bounds.top - availableTop);
+    if (scrollDistance > 1) shell.scrollTop += Math.ceil(scrollDistance);
   }
 
   visual.addEventListener('resize', update);
