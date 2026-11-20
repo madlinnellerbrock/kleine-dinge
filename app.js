@@ -884,6 +884,12 @@ function previousLine(field) {
 function enter(field) {
   const { edit, id } = field.dataset;
   if (edit === 'note-text') return false;
+  if (edit === 'new-sub' && !field.value.trim()) {
+    const tasks = currentTasks();
+    const next = tasks[tasks.findIndex(task => task.id === id) + 1];
+    focusEnd(next ? findEditor('task-text', next.id) : findEditor('new-task', tab));
+    return true;
+  }
   if (edit.startsWith('new-')) createFrom(field);
   else {
     const entry = locate(id);

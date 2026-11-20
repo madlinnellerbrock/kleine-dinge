@@ -46,6 +46,7 @@ button svg { display: block; flex-shrink: 0; }
   max-width: var(--width);
   min-height: 0;
   margin-inline: auto;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: contain;
   scroll-padding-block: 12px;
@@ -83,7 +84,6 @@ button svg { display: block; flex-shrink: 0; }
   min-width: 0;
   border-radius: var(--card-radius);
   isolation: isolate;
-  overflow: hidden;
   --swipe-left: -108px;
   --swipe-right: 60px;
 }
@@ -450,7 +450,6 @@ dialog::backdrop { background: #271e176e; }
 body { background: var(--canvas); }
 .status-bar-background { display: none; }
 @media (display-mode: standalone) and (max-width: 699px) {
-  :root, body { background-color: var(--forest); }
   /* Opaque top edge for iOS to sample when it tints the system status bar. */
   .status-bar-background {
     display: block;
