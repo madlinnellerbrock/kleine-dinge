@@ -1,5 +1,5 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<rect width="512" height="512" rx="48" fill="#204033"/>
+<rect width="512" height="512" fill="#204033"/>
 <rect x="81" y="81" width="350" height="350" rx="75" fill="#EBDFC9"/>
 <use xlink:href="#image0_1230_18" transform="translate(126 126.2) scale(1.625)"/>
 <defs>
