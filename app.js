@@ -901,8 +901,10 @@ function enter(field) {
   return true;
 }
 
+let multilineEditor = null;
 root.addEventListener('keydown', event => {
   const field = event.target;
+  multilineEditor = null;
   if ((event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) && field.closest('[data-item]')) {
     event.preventDefault();
     itemMenu(field.closest('[data-item]').dataset.item);
@@ -910,14 +912,26 @@ root.addEventListener('keydown', event => {
   }
   if (event.key === 'Escape') setReveal(null);
   if (!field.matches('textarea[data-edit]') || event.isComposing) return;
-  if (event.key === 'Enter' && !event.shiftKey && enter(field)) event.preventDefault();
+  if (event.key === 'Enter') {
+    if (event.shiftKey) multilineEditor = field;
+    else if (enter(field)) event.preventDefault();
+  }
   if (event.key === 'Backspace' && !field.value && previousLine(field)) event.preventDefault();
+});
+
+root.addEventListener('keyup', event => {
+  if (event.key === 'Enter') multilineEditor = null;
 });
 
 root.addEventListener('beforeinput', event => {
   const field = event.target;
+  const allowLineBreak = multilineEditor === field;
+  multilineEditor = null;
   if (!event.cancelable || !field.matches('textarea[data-edit]') || event.isComposing) return;
   if (event.inputType === 'deleteContentBackward' && !field.value && previousLine(field)) event.preventDefault();
+  if (!allowLineBreak && ['insertLineBreak', 'insertParagraph'].includes(event.inputType) && enter(field)) {
+    event.preventDefault();
+  }
 });
 
 function setReveal(frame, direction) {
@@ -1088,10 +1102,14 @@ function trackKeyboardLayout() {
       if (!editing) fullHeight = root.clientHeight;
       return;
     }
+    const visibleBottom = visual.height + visual.offsetTop;
     page.style.setProperty('--app-full-height', fullHeight + 'px');
-    page.style.setProperty('--keyboard-viewport-height', Math.round(visual.height + visual.offsetTop) + 'px');
-    if (editor?.matches('.shell textarea') &&
-      editor.getBoundingClientRect().bottom > visual.height + visual.offsetTop - 56) {
+    const shell = root.querySelector('.shell');
+    const overlap = Math.max(0, Math.ceil(shell.getBoundingClientRect().bottom - visibleBottom));
+    page.style.setProperty('--keyboard-overlap', overlap + 'px');
+    if (editor?.matches('.shell .newtask textarea')) {
+      shell.scrollTop = shell.scrollHeight - shell.clientHeight;
+    } else if (editor?.matches('.shell textarea') && editor.getBoundingClientRect().bottom > visibleBottom - 12) {
       editor.scrollIntoView({ block: 'nearest' });
     }
   }

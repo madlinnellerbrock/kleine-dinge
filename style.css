@@ -41,10 +41,18 @@ button svg { display: block; flex-shrink: 0; }
 }
 .keyboard-open #app { height: var(--app-full-height); }
 .keyboard-open .shell {
-  align-self: start;
-  height: min(100%, var(--keyboard-viewport-height));
-  padding-bottom: 64px;
-  scroll-padding-bottom: 56px;
+  padding-bottom: calc(var(--keyboard-overlap, 0px) + 12px);
+  scroll-padding-bottom: calc(var(--keyboard-overlap, 0px) + 12px);
+}
+.keyboard-open .shell:has(.newtask:focus-within) {
+  display: flex;
+  flex-direction: column;
+}
+.keyboard-open .shell:has(.newtask:focus-within) .header { flex: none; }
+.keyboard-open .list:has(.newtask:focus-within) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
 }
 
 .shell {
@@ -451,9 +459,13 @@ dialog::backdrop { background: #271e176e; }
   --nav-ink: #1c1815;
   --nav-orange: #ff7628;
   --light-grain: radial-gradient(#fff3de0a .55px, transparent .85px);
+  --canvas-grain: radial-gradient(#7b604910 .6px, transparent .85px);
 }
 
 body { background: var(--canvas); }
+:root.keyboard-open, .keyboard-open body {
+  background: var(--canvas) var(--canvas-grain) 0 0 / 5px 5px;
+}
 .status-bar-background { display: none; }
 @media (display-mode: standalone) and (max-width: 699px) {
   /* Opaque top edge for iOS to sample when it tints the system status bar. */
@@ -471,7 +483,7 @@ body { background: var(--canvas); }
   --header-height: calc(204px + env(safe-area-inset-top));
   --header-overlap: 28px;
   background-color: var(--canvas);
-  background-image: radial-gradient(#7b604910 .6px, transparent .85px);
+  background-image: var(--canvas-grain);
   background-size: 5px 5px;
   padding: 0 var(--right-gutter) 24px var(--left-gutter);
 }
@@ -601,6 +613,7 @@ body { background: var(--canvas); }
   background: #fffaef;
 }
 .newtask:focus-within { background: #fff8ea; border-color: var(--accent); }
+.keyboard-open .list > .newtask:focus-within { margin-top: auto; }
 .add { background: #f6e2cd; }
 .add:hover { background: #f3d8bb; }
 
