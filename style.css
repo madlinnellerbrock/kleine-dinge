@@ -39,11 +39,22 @@ button svg { display: block; flex-shrink: 0; }
   height: 100dvh;
   overflow: hidden;
 }
-.keyboard-open #app { height: var(--app-full-height); }
+@supports (overflow: clip) {
+  html, body, #app { overflow: clip; }
+}
+.keyboard-open #app {
+  height: var(--app-full-height);
+  position: relative;
+  top: var(--keyboard-viewport-top, 0px);
+}
 .keyboard-open .shell {
   --keyboard-clearance: 12px;
-  padding-bottom: calc(var(--keyboard-overlap, 0px) + var(--keyboard-clearance));
-  scroll-padding-bottom: calc(var(--keyboard-overlap, 0px) + var(--keyboard-clearance));
+  overflow-anchor: none;
+}
+.keyboard-open .shell::after {
+  content: "";
+  display: block;
+  height: calc(var(--keyboard-overlap, 0px) + var(--keyboard-clearance));
 }
 @supports (-webkit-touch-callout: none) {
   /* The iOS input accessory can cover part of the visual viewport. */

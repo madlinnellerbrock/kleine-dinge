@@ -271,7 +271,9 @@ function focusEnd(field) {
     selection.selectAllChildren(field);
     selection.collapseToEnd();
   } else field.setSelectionRange(field.value.length, field.value.length);
-  field.scrollIntoView({ block: 'nearest' });
+  if (!document.documentElement.classList.contains('keyboard-open')) {
+    field.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 function taskFace(id) {
@@ -1227,38 +1229,85 @@ function trackKeyboardLayout() {
   if (!visual) return;
   const page = document.documentElement;
   let fullHeight = root.clientHeight;
+  let activeEditor;
+  let initialScrollTop;
+  let tappedEditor;
+  let frame;
 
   function update() {
     const editor = document.activeElement;
     const editing = editor?.matches('textarea, .rich-note, input:not([type="file"])');
+    const shell = root.querySelector('.shell');
+    const inList = editing && shell.contains(editor);
+    if (editor !== activeEditor) {
+      activeEditor = editor;
+      initialScrollTop = inList && editor.closest('.newtask')
+        ? (tappedEditor?.field === editor ? tappedEditor.scrollTop : shell.scrollTop)
+        : null;
+      tappedEditor = null;
+    }
     const wasOpen = page.classList.contains('keyboard-open');
-    const open = visual.scale === 1 && (editing || wasOpen) && fullHeight - visual.height > 135;
-    page.classList.toggle('keyboard-open', open);
+    const open = Math.abs(visual.scale - 1) < 0.01 && (editing || wasOpen) && fullHeight - visual.height > 100;
     if (!open) {
-      if (!editing) fullHeight = root.clientHeight;
+      page.classList.remove('keyboard-open');
+      if (!editing || wasOpen) fullHeight = root.clientHeight;
       return;
     }
-    const visibleBottom = visual.height + visual.offsetTop;
+    const viewportTop = Math.max(0, visual.offsetTop);
+    const viewportBottom = viewportTop + visual.height;
     page.style.setProperty('--app-full-height', fullHeight + 'px');
-    const shell = root.querySelector('.shell');
+    // Keep the app frame in place if iOS pans the visual viewport on focus.
+    page.style.setProperty('--keyboard-viewport-top', viewportTop + 'px');
+    page.classList.add('keyboard-open');
+
     const shellBounds = shell.getBoundingClientRect();
-    const overlap = Math.max(0, Math.ceil(shellBounds.bottom - visibleBottom));
+    const overlap = Math.max(0, Math.ceil(shellBounds.bottom - viewportBottom));
     page.style.setProperty('--keyboard-overlap', overlap + 'px');
-    if (!editor?.matches('.shell textarea, .shell .rich-note, .shell input:not([type="file"])')) return;
+    if (!inList) return;
 
     const clearance = parseFloat(getComputedStyle(shell).getPropertyValue('--keyboard-clearance'));
-    const field = editor.closest('.newtask, .note-editor') ?? editor;
-    const availableBottom = Math.min(shellBounds.bottom, visibleBottom) - clearance;
-    const availableTop = Math.max(shellBounds.top, visual.offsetTop);
-    const bounds = field.getBoundingClientRect();
-    const scrollDistance = Math.min(bounds.bottom - availableBottom, bounds.top - availableTop);
-    if (scrollDistance > 1) shell.scrollTop += Math.ceil(scrollDistance);
+    const visibleTop = Math.max(shellBounds.top, viewportTop);
+    const visibleBottom = Math.min(shellBounds.bottom, viewportBottom - clearance);
+    const container = editor.closest('.newtask, .note-editor') ?? editor;
+    const cardBounds = container.getBoundingClientRect();
+    const bounds = cardBounds.height <= visibleBottom - visibleTop ? cardBounds : editor.getBoundingClientRect();
+    const currentScrollTop = shell.scrollTop;
+    const baseline = initialScrollTop ?? currentScrollTop;
+    const minScroll = currentScrollTop + bounds.bottom - visibleBottom;
+    const maxScroll = Math.max(minScroll, currentScrollTop + bounds.top - visibleTop);
+
+    // A composer that already fits keeps its position under the last card.
+    const target = Math.max(0, Math.min(maxScroll, Math.max(baseline, minScroll)));
+    if (Math.abs(target - currentScrollTop) > 1) shell.scrollTop = target;
   }
 
-  visual.addEventListener('resize', update);
-  visual.addEventListener('scroll', update);
-  document.addEventListener('focusin', update);
-  document.addEventListener('focusout', () => requestAnimationFrame(update));
+  function scheduleUpdate() {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(update);
+  }
+
+  function keepManualScroll() {
+    initialScrollTop = null;
+  }
+
+  visual.addEventListener('resize', scheduleUpdate);
+  visual.addEventListener('scroll', scheduleUpdate);
+  window.addEventListener('resize', scheduleUpdate);
+  document.addEventListener('focusin', () => {
+    update();
+    scheduleUpdate();
+  });
+  document.addEventListener('focusout', scheduleUpdate);
+  root.addEventListener('pointerdown', event => {
+    const field = event.target.closest('.newtask [data-edit]');
+    tappedEditor = field && field !== document.activeElement
+      ? { field, scrollTop: field.closest('.shell').scrollTop }
+      : null;
+  }, { capture: true });
+  root.addEventListener('input', scheduleUpdate);
+  root.addEventListener('keyup', scheduleUpdate);
+  root.addEventListener('touchmove', keepManualScroll, { passive: true });
+  root.addEventListener('wheel', keepManualScroll, { passive: true });
   update();
 }
 
