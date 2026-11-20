@@ -43,18 +43,16 @@ button svg { display: block; flex-shrink: 0; }
   html, body, #app { overflow: clip; }
 }
 .keyboard-open #app {
-  height: var(--app-full-height);
+  height: var(--keyboard-viewport-height);
+  grid-template-rows: minmax(0, 1fr);
   position: relative;
   top: var(--keyboard-viewport-top, 0px);
 }
 .keyboard-open .shell {
   --keyboard-clearance: 12px;
+  height: calc(var(--keyboard-viewport-height) - var(--keyboard-clearance));
+  align-self: start;
   overflow-anchor: none;
-}
-.keyboard-open .shell::after {
-  content: "";
-  display: block;
-  height: calc(var(--keyboard-overlap, 0px) + var(--keyboard-clearance));
 }
 @supports (-webkit-touch-callout: none) {
   /* The iOS input accessory can cover part of the visual viewport. */
@@ -300,7 +298,7 @@ button svg { display: block; flex-shrink: 0; }
 }
 .nav button.active { color: var(--accent); font-weight: 700; }
 .nav svg { width: 22px; height: 22px; }
-.keyboard-open .nav { visibility: hidden; }
+.keyboard-open .nav { display: none; }
 
 .actions {
   position: absolute;

@@ -1270,6 +1270,7 @@ function trackKeyboardLayout() {
   let initialScrollTop;
   let tappedEditor;
   let frame;
+  let focusTimer;
 
   function update() {
     const editor = document.activeElement;
@@ -1284,27 +1285,23 @@ function trackKeyboardLayout() {
       tappedEditor = null;
     }
     const wasOpen = page.classList.contains('keyboard-open');
-    const open = Math.abs(visual.scale - 1) < 0.01 && (editing || wasOpen) && fullHeight - visual.height > 100;
+    const viewportHeight = Math.min(visual.height, window.innerHeight);
+    const open = Math.abs(visual.scale - 1) < 0.01 && (editing || wasOpen) && fullHeight - viewportHeight > 100;
     if (!open) {
       page.classList.remove('keyboard-open');
       if (!editing || wasOpen) fullHeight = root.clientHeight;
       return;
     }
     const viewportTop = Math.max(0, visual.offsetTop);
-    const viewportBottom = viewportTop + visual.height;
-    page.style.setProperty('--app-full-height', fullHeight + 'px');
-    // Keep the app frame in place if iOS pans the visual viewport on focus.
+    // Give the list a scrollport that ends above the keyboard and its accessory bar.
+    page.style.setProperty('--keyboard-viewport-height', viewportHeight + 'px');
     page.style.setProperty('--keyboard-viewport-top', viewportTop + 'px');
     page.classList.add('keyboard-open');
-
-    const shellBounds = shell.getBoundingClientRect();
-    const overlap = Math.max(0, Math.ceil(shellBounds.bottom - viewportBottom));
-    page.style.setProperty('--keyboard-overlap', overlap + 'px');
     if (!inList) return;
 
-    const clearance = parseFloat(getComputedStyle(shell).getPropertyValue('--keyboard-clearance'));
-    const visibleTop = Math.max(shellBounds.top, viewportTop);
-    const visibleBottom = Math.min(shellBounds.bottom, viewportBottom - clearance);
+    const shellBounds = shell.getBoundingClientRect();
+    const visibleTop = shellBounds.top;
+    const visibleBottom = shellBounds.bottom - 8;
     const container = editor.closest('.newtask, .note-editor') ?? editor;
     const cardBounds = container.getBoundingClientRect();
     const bounds = cardBounds.height <= visibleBottom - visibleTop ? cardBounds : editor.getBoundingClientRect();
@@ -1325,6 +1322,7 @@ function trackKeyboardLayout() {
 
   function keepManualScroll() {
     initialScrollTop = null;
+    clearTimeout(focusTimer);
   }
 
   visual.addEventListener('resize', scheduleUpdate);
@@ -1333,6 +1331,9 @@ function trackKeyboardLayout() {
   document.addEventListener('focusin', () => {
     update();
     scheduleUpdate();
+    // iOS can finish native focus scrolling after the viewport resize.
+    clearTimeout(focusTimer);
+    focusTimer = setTimeout(scheduleUpdate, 400);
   });
   document.addEventListener('focusout', scheduleUpdate);
   root.addEventListener('pointerdown', event => {
