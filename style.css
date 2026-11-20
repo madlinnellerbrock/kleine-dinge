@@ -601,7 +601,6 @@ body { background: var(--canvas); }
 .category .emoji, .note .emoji { background: #f3e2ca; }
 .category-link svg { color: var(--accent); }
 .editable { font-weight: 530; }
-.note .editable { font: 400 1.08rem/1.4 var(--serif); }
 .check-target span { border-color: #8b7d66; }
 .check-target[aria-checked="true"] span { background: var(--forest); border-color: var(--forest); }
 .task.completed { --task-surface: #f9f0e1; background: var(--task-surface); }
